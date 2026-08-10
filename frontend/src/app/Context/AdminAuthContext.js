@@ -14,11 +14,14 @@ export const AdminAuthProvider = ({ children }) => {
 
     try {
       const token = localStorage.getItem("adminToken");
+      console.log("Token from localStorage:", token ? "exists" : "missing");
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/me`, {
         credentials: "include",
         headers: token
-          ? { Authorization: `Bearer ${token}` }
+          ? {
+              Authorization: `Bearer ${token}`,
+            }
           : {},
       });
 

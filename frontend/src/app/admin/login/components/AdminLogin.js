@@ -18,25 +18,26 @@ export default function AdminLogin() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
         credentials: "include",
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || "Login failed ❌");
+        throw new Error(data.message || "Login failed");
       }
 
-      // Save token
+      // ========== THIS IS THE IMPORTANT PART ==========
       if (data.token) {
         localStorage.setItem("adminToken", data.token);
+        console.log("Token saved to localStorage");
+      } else {
+        console.warn("No token received from server");
       }
+      // ================================================
 
       setMessage("Login successful ✅");
-      console.log(data);
-
-      // redirect example
       window.location.href = "/admin/dashboard";
     } catch (error) {
       setMessage(error.message);
