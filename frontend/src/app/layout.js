@@ -5,8 +5,7 @@ import { ToastContainer } from "./Shared/Nexttoast";
 import LayoutWrapper from "./Shared/LayoutWrapper";
 import { AdminAuthProvider } from "./Context/AdminAuthContext";
 import "leaflet/dist/leaflet.css";
-import CrispChat from "./Shared/CrispChat";
-import { StaffAuthProvider } from "./Context/StaffAuthContext";
+// import CrispChat from "./Shared/CrispChat";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import Script from "next/script";
 
@@ -81,10 +80,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${dmSans.variable} ${playfair.variable}`}>
-      <head>
+      {/* <head>
 
         <meta name="facebook-domain-verification" content="o7vox7j07wqf5mykjouqbko1qp7pvv" />
-        {/* ✅ Microsoft Clarity */}
         <Script id="microsoft-clarity" strategy="afterInteractive">
           {`
             (function(c,l,a,r,i,t,y){
@@ -94,11 +92,10 @@ export default function RootLayout({ children }) {
             })(window, document, "clarity", "script", "ws034ts301");
           `}
         </Script>
-      </head>
+      </head> */}
       <body className="antialiased">
         <AuthProvider>
           <AdminAuthProvider>
-          <StaffAuthProvider>
           <LayoutWrapper>
           {children}
 
@@ -112,10 +109,9 @@ export default function RootLayout({ children }) {
             pauseOnHover={false} 
           />
           </LayoutWrapper>
-          </StaffAuthProvider>
           </AdminAuthProvider>
         </AuthProvider>
-        <CrispChat />
+        {/* <CrispChat /> */}
       </body>
     </html>
   );
