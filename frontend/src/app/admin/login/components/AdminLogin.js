@@ -28,6 +28,11 @@ export default function AdminLogin() {
         throw new Error(data.message || "Login failed ❌");
       }
 
+      // Save token
+      if (data.token) {
+        localStorage.setItem("adminToken", data.token);
+      }
+
       setMessage("Login successful ✅");
       console.log(data);
 
