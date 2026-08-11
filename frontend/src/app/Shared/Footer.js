@@ -115,11 +115,11 @@ export default function Footer() {
               </div>
 
               <a
-                href="tel:02077905577"
+                href="http://wa.me/+447950309760"
                 className="flex items-center gap-3 hover:text-[#F47C3C] transition-colors"
               >
                 <Phone size={18} className="text-[#F47C3C] shrink-0" />
-                <span>+44 (0) 20 7790 5577</span>
+                <span>+447950309760</span>
               </a>
 
               <a
