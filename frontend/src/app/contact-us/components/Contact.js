@@ -135,7 +135,7 @@ const Contact = () => {
                 {/* Phone & Email Cards Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
                   <a
-                    href="tel:02077905577"
+                    href="tel:+447950309760"
                     className="flex items-center gap-3.5 bg-white/5 border border-white/10 p-3.5 rounded-2xl hover:bg-white/10 transition-colors backdrop-blur-md group"
                   >
                     <div className="p-2.5 bg-[#F9A370]/20 text-[#F9A370] rounded-xl shrink-0">
@@ -146,7 +146,7 @@ const Contact = () => {
                         Phone Number
                       </div>
                       <div className="text-xs sm:text-sm font-semibold text-white group-hover:text-[#F9A370] transition-colors">
-                        020 7790 5577
+                        +447950309760
                       </div>
                     </div>
                   </a>

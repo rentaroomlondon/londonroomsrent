@@ -65,7 +65,7 @@ export default function OfficeSection() {
               {/* Action Buttons: Call & Email */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 <a
-                  href="tel:02077905577"
+                  href="tel:+447950309760"
                   className="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 hover:bg-[#F47C3C] hover:border-[#F47C3C] hover:text-white group transition-all duration-300"
                 >
                   <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-[#0F253B] flex items-center justify-center group-hover:border-transparent shrink-0">
@@ -76,7 +76,7 @@ export default function OfficeSection() {
                       Call Us
                     </span>
                     <span className="text-xs font-bold text-[#0F253B] group-hover:text-white">
-                      020 7790 5577
+                      +447950309760
                     </span>
                   </div>
                 </a>
