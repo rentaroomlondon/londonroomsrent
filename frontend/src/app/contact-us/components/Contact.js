@@ -135,7 +135,7 @@ const Contact = () => {
                 {/* Phone & Email Cards Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
                   <a
-                    href="wa.me/+447950309760"
+                    href="http://wa.me/+447950309760"
                     className="flex items-center gap-3.5 bg-white/5 border border-white/10 p-3.5 rounded-2xl hover:bg-white/10 transition-colors backdrop-blur-md group"
                   >
                     <div className="p-2.5 bg-[#F9A370]/20 text-[#F9A370] rounded-xl shrink-0">
