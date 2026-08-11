@@ -157,7 +157,7 @@ const Client = ({ listing }) => {
                     
                     {/* Dark Navy Button */}
                     <button
-                      onClick={() => window.open("https://wa.me/447463494058", "_blank")}
+                      onClick={() => window.open("https://wa.me/447950309760", "_blank")}
                       className="flex-1 bg-[#101D2D] text-white py-2 rounded-[10px] font-bold flex items-center justify-center gap-2 hover:bg-[#1a2b40] transition-colors"
                     >
                       <span className="text-lg">📞</span>

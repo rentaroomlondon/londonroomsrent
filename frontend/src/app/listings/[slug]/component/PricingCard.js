@@ -193,7 +193,7 @@ const handleWhatsApp = () => {
           </button>
           
           <a
-            href="https://wa.me/447463494058"
+            href="https://wa.me/447950309760"
             target="_blank"
             rel="noopener noreferrer"
             className="w-full border border-[#0C1F33] text-[#0F172A] py-4 rounded-2xl font-semibold text-base flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors bg-white"
