@@ -175,7 +175,7 @@ const RegisterPage = () => {
         {/* Footer Support Callout */}
         <div className="pt-8 text-center lg:text-left text-xs text-gray-400 border-t border-white/10 mt-8 relative z-10">
           Need assistance? Speak with an advisor at{" "}
-          <a href="tel:+447950309760" className="text-[#F47C3C] font-bold underline">
+          <a href="wa.me/+447950309760" className="text-[#F47C3C] font-bold underline">
             +447950309760
           </a>
         </div>
