@@ -8,7 +8,7 @@ import {
   MapPin,
   ArrowRight,
   Facebook,
-  Twitter,
+  Instagram,
   Youtube,
   Linkedin,
   ShieldCheck,
@@ -33,9 +33,9 @@ const companyLinks = [
 ];
 
 const socialLinks = [
-  { name: "Facebook", href: "#", icon: Facebook },
-  { name: "Twitter", href: "#", icon: Twitter },
-  { name: "YouTube", href: "#", icon: Youtube },
+  { name: "Facebook", href: "https://www.facebook.com/profile.php?id=61593242607012", icon: Facebook },
+  { name: "Instagram", href: "https://www.instagram.com/londonroomsrent/", icon: Instagram },
+  { name: "YouTube", href: "https://www.youtube.com/channel/UCc07aO7m1bELzRCUw_irAaA", icon: Youtube },
   { name: "LinkedIn", href: "#", icon: Linkedin },
 ];
 
