@@ -48,6 +48,11 @@ export const metadata = {
     canonical: "https://LONDONROOMSRENT.co.uk",
   },
 
+  // Google Search Console verification
+  verification: {
+    google: "DlWtlOAaZt4V4lIY8EF1RQsz3zCN3cwgk8uF2b8wnKM",
+  },
+
   openGraph: {
     title: "LONDONROOMSRENT | Rooms for Rent in London",
     description:
