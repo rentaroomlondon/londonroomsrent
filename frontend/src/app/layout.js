@@ -105,7 +105,7 @@ export default function RootLayout({ children }) {
           {children}
 
           {/* Google Analytics */}
-          <GoogleAnalytics gaId="G-Y7J5NJNX6G" />
+          <GoogleAnalytics gaId="G-51DMN5CGSP" />
           <ToastContainer 
             theme="dark"
             position="top-right"
