@@ -1,18 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ArrowRight,
   MapPin,
   Phone,
   Mail,
   Clock,
-  Send,
   Loader2,
   Building2,
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import PhoneInput from "react-phone-input-2";
+import "react-phone-input-2/lib/style.css";
+import { isValidPhoneNumber, parsePhoneNumber } from "libphonenumber-js";
+import { analytics } from "@/app/utils/analytics";
 
 const Contact = () => {
   const [form, setForm] = useState({
@@ -23,9 +26,31 @@ const Contact = () => {
     email: "",
     phone: "",
     message: "",
+    website: "", // honeypot
   });
 
   const [loading, setLoading] = useState(false);
+
+  // ============================
+  // PAGE VIEW EVENT
+  // ============================
+  useEffect(() => {
+    analytics.trackEvent
+      ? analytics.trackEvent("contact_page_view", {
+          page_path: window.location.pathname,
+        })
+      : null;
+
+    // Safer direct call (matches your analytics helper style)
+    if (typeof window !== "undefined") {
+      // Use the trackEvent helper if you export it, otherwise fire via existing pattern
+      import("@/app/utils/analytics").then(({ trackEvent }) => {
+        trackEvent("contact_page_view", {
+          page_path: window.location.pathname,
+        });
+      }).catch(() => {});
+    }
+  }, []);
 
   const handleChange = (e) => {
     setForm({
@@ -34,8 +59,169 @@ const Contact = () => {
     });
   };
 
+  const setDirectValue = (name, value) => {
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // ============================
+  // VALIDATION HELPERS (copied from first Contact)
+  // ============================
+  const isValidRealName = (name) => {
+    if (!name || typeof name !== "string") return false;
+
+    const cleaned = name.trim();
+
+    // 1. Basic format (letters, space, ' and - only) + min 2 chars
+    if (!/^[a-zA-Z\s'-]{2,40}$/.test(cleaned)) return false;
+
+    // 2. Must contain at least one vowel
+    if (!/[aeiouAEIOU]/.test(cleaned)) return false;
+
+    // 3. Reject 4 or more consecutive consonants
+    if (/[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{4,}/.test(cleaned)) {
+      return false;
+    }
+
+    // 4. Reject repeated characters (aaaa, bbbb, etc.)
+    if (/(.)\1{3,}/.test(cleaned)) return false;
+
+    // 5. Reject common keyboard smash / random patterns
+    const fakePatterns = [
+      "asdf", "qwer", "zxcv", "hjkl", "uiop", "bnm",
+      "qwerty", "asdfgh", "zxcvbn", "qazwsx", "poiuyt",
+      "jhdb", "hbds", "dsgh", "fghj", "cvbn", "tyui",
+      "qwe", "asd", "zxc", "rty", "fgh", "vbn",
+      "test", "testing", "tester", "testuser", "test1", "test2", "test3",
+      "test87", "test123", "dummy", "fake", "sample", "example",
+      "name", "fullname", "firstname", "lastname", "username", "user", "admin", "guest"
+    ];
+
+    const lowerName = cleaned.toLowerCase();
+    if (fakePatterns.some((pattern) => lowerName.includes(pattern))) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const isFakeOrInvalidPhone = (phone) => {
+    if (!phone) return true;
+
+    const fullPhone = phone.startsWith("+") ? phone : `+${phone.replace(/\D/g, "")}`;
+
+    if (!isValidPhoneNumber(fullPhone)) {
+      return true;
+    }
+
+    try {
+      const parsed = parsePhoneNumber(fullPhone);
+      const nationalNumber = parsed.nationalNumber;
+
+      const isSequential = (num) => {
+        const seq = "01234567890123456789";
+        const revSeq = "98765432109876543210";
+        return seq.includes(num) || revSeq.includes(num);
+      };
+
+      const isRepeated = /^(\d)\1+$/.test(nationalNumber);
+
+      const fakePatterns = [
+        "123456789",
+        "1234567890",
+        "0123456789",
+        "987654321",
+        "9876543210",
+        "111111111",
+        "222222222",
+        "999999999",
+        "000000000",
+        "555555555",
+      ];
+
+      if (
+        isSequential(nationalNumber) ||
+        isRepeated ||
+        fakePatterns.some((fake) => nationalNumber.includes(fake))
+      ) {
+        return true;
+      }
+
+      return false;
+    } catch (err) {
+      return true;
+    }
+  };
+
+  const validateForm = () => {
+    const { firstName, lastName, email, phone, message, website } = form;
+
+    // Honeypot
+    if (website) {
+      return false;
+    }
+
+    if (!isValidRealName(firstName)) {
+      toast.error("Please enter a valid first name");
+      return false;
+    }
+    if (!isValidRealName(lastName)) {
+      toast.error("Please enter a valid surname");
+      return false;
+    }
+
+    // Strong Email Validation
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      toast.error("Please enter a valid email address");
+      return false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) {
+      toast.error("Please enter a valid email address");
+      return false;
+    }
+
+    const localPart = cleanEmail.split("@")[0];
+
+    const isSuspicious =
+      localPart.length < 4 ||
+      (localPart.match(/\./g) || []).length >= 2 ||
+      localPart.includes("..") ||
+      localPart.startsWith(".") ||
+      localPart.endsWith(".") ||
+      /^[0-9]+$/.test(localPart) ||
+      /^(test|fake|dummy|sample|admin|user|guest|asdf|qwer)/.test(localPart);
+
+    if (isSuspicious) {
+      toast.error("Please enter a valid email address");
+      return false;
+    }
+
+    if (isFakeOrInvalidPhone(phone)) {
+      toast.error("Please enter a complete and valid phone number");
+      return false;
+    }
+
+    if (
+      message &&
+      message.trim().length > 10 &&
+      !/\s/.test(message.trim()) &&
+      /^[a-zA-Z0-9]+$/.test(message.trim())
+    ) {
+      toast.error("Please enter a proper message");
+      return false;
+    }
+
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!validateForm()) return;
+
     setLoading(true);
 
     try {
@@ -53,6 +239,9 @@ const Contact = () => {
       const data = await res.json();
 
       if (data.success) {
+        // ✅ Analytics – contact form submit
+        analytics.contactFormSubmit();
+
         toast.success("Message sent successfully!");
 
         setForm({
@@ -63,6 +252,7 @@ const Contact = () => {
           email: "",
           phone: "",
           message: "",
+          website: "",
         });
       } else {
         toast.error(data.message || "Something went wrong");
@@ -99,7 +289,6 @@ const Contact = () => {
           {/* LEFT COLUMN: Office Info & Map */}
           <div className="lg:col-span-5 bg-[#0A192F] text-white p-6 sm:p-10 lg:p-12 flex flex-col justify-between relative overflow-hidden">
             
-            {/* Soft Ambient Background Glows */}
             <div className="absolute -top-24 -left-24 w-80 h-80 bg-[#F9A370]/20 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-24 -right-24 w-80 h-80 bg-[#F9A370]/15 rounded-full blur-3xl pointer-events-none" />
 
@@ -113,10 +302,9 @@ const Contact = () => {
                 </p>
               </div>
 
-              {/* Info Items List */}
               <div className="space-y-5">
                 
-                {/* Address Card */}
+                {/* Address */}
                 <div className="flex items-start gap-3.5 bg-white/5 border border-white/10 p-4 rounded-2xl backdrop-blur-md">
                   <div className="p-2.5 bg-[#F9A370]/20 text-[#F9A370] rounded-xl shrink-0 mt-0.5">
                     <MapPin className="w-5 h-5" />
@@ -132,7 +320,7 @@ const Contact = () => {
                   </div>
                 </div>
 
-                {/* Phone & Email Cards Grid */}
+                {/* Phone & Email */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
                   <a
                     href="http://wa.me/+447950309760"
@@ -188,7 +376,7 @@ const Contact = () => {
               </div>
             </div>
 
-            {/* Embedded Google Map */}
+            {/* Map */}
             <div className="mt-8 relative z-10">
               <div className="w-full h-48 rounded-2xl overflow-hidden border border-white/10 shadow-lg relative group">
                 <iframe
@@ -219,9 +407,32 @@ const Contact = () => {
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4" noValidate>
                 
-                {/* Contact Method & Title Selectors */}
+                {/* HONEYPOT */}
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "-9999px",
+                    opacity: 0,
+                    height: 0,
+                    overflow: "hidden",
+                  }}
+                  aria-hidden="true"
+                >
+                  <label htmlFor="website">Website</label>
+                  <input
+                    type="text"
+                    id="website"
+                    name="website"
+                    value={form.website}
+                    onChange={handleChange}
+                    tabIndex={-1}
+                    autoComplete="off"
+                  />
+                </div>
+
+                {/* Contact Method & Title */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
@@ -269,6 +480,8 @@ const Contact = () => {
                       onChange={handleChange}
                       placeholder="e.g. John"
                       required
+                      minLength={2}
+                      maxLength={40}
                       className="w-full p-3.5 bg-[#FAF8F5] border border-[#E8E4DF] rounded-xl text-xs sm:text-sm text-[#0A192F] outline-none focus:ring-2 focus:ring-[#F9A370]/30 focus:border-[#F9A370] transition-all placeholder-gray-400"
                     />
                   </div>
@@ -284,12 +497,14 @@ const Contact = () => {
                       onChange={handleChange}
                       placeholder="e.g. Doe"
                       required
+                      minLength={2}
+                      maxLength={40}
                       className="w-full p-3.5 bg-[#FAF8F5] border border-[#E8E4DF] rounded-xl text-xs sm:text-sm text-[#0A192F] outline-none focus:ring-2 focus:ring-[#F9A370]/30 focus:border-[#F9A370] transition-all placeholder-gray-400"
                     />
                   </div>
                 </div>
 
-                {/* Email Address */}
+                {/* Email */}
                 <div className="space-y-1">
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                     Email Address *
@@ -305,23 +520,31 @@ const Contact = () => {
                   />
                 </div>
 
-                {/* Phone Number */}
+                {/* Phone – now using PhoneInput */}
                 <div className="space-y-1">
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                     Phone Number *
                   </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={form.phone}
-                    onChange={handleChange}
-                    placeholder="e.g. +44 7123 456789"
-                    required
-                    className="w-full p-3.5 bg-[#FAF8F5] border border-[#E8E4DF] rounded-xl text-xs sm:text-sm text-[#0A192F] outline-none focus:ring-2 focus:ring-[#F9A370]/30 focus:border-[#F9A370] transition-all placeholder-gray-400"
-                  />
+                  <div className="rounded-xl border border-[#E8E4DF] bg-[#FAF8F5] overflow-hidden focus-within:ring-2 focus-within:ring-[#F9A370]/30 focus-within:border-[#F9A370]">
+                    <PhoneInput
+                      country={"gb"}
+                      value={form.phone}
+                      onChange={(phone) => setDirectValue("phone", phone)}
+                      inputProps={{
+                        name: "phone",
+                        required: true,
+                      }}
+                      containerClass="w-full"
+                      inputClass="!w-full !h-[50px] !pl-14 !pr-4 !bg-transparent !border-none !text-[#0A192F] !text-sm !outline-none"
+                      buttonClass="!bg-transparent !border-none"
+                      dropdownClass="!text-black"
+                      enableSearch
+                      placeholder="Phone Number *"
+                    />
+                  </div>
                 </div>
 
-                {/* Message Textarea */}
+                {/* Message */}
                 <div className="space-y-1">
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                     How Can We Help You?
@@ -336,7 +559,7 @@ const Contact = () => {
                   />
                 </div>
 
-                {/* Submit Button */}
+                {/* Submit */}
                 <button
                   type="submit"
                   disabled={loading}

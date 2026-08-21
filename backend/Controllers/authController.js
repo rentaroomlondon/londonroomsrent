@@ -3,7 +3,8 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import User from "../Models/User.js";
 import { sendEmail } from "../utils/sendEmail.js";
-
+import { validate } from "deep-email-validator";
+import { isNameSafe } from "../utils/validateName.js"; // ← NameAPI helper
 
 // helper to create JWT cookie
 const sendTokenCookie = (user, res, rememberMe) => {
@@ -31,6 +32,61 @@ const sendTokenCookie = (user, res, rememberMe) => {
 };
 
 
+// ---------- Helpers name and email ----------
+const isValidName = (name) => {
+  if (!name || typeof name !== "string") return false;
+
+  const cleaned = name.trim();
+
+  // 1. Basic format
+  if (!/^[a-zA-Z\s'-]{2,40}$/.test(cleaned)) return false;
+
+  // 2. Must contain at least one vowel
+  if (!/[aeiouAEIOU]/.test(cleaned)) return false;
+
+  // 3. Reject too many consecutive consonants
+  if (/[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{5,}/.test(cleaned)) {
+    return false;
+  }
+
+  // 4. Reject very short names
+  if (cleaned.length < 3) return false;
+
+  // 5. Reject common fake / keyboard patterns
+  const lower = cleaned.toLowerCase();
+  if (
+    /^(test|temp|fake|asdf|qwerty|xxx|spam|abc|admin|name|fullname|lastname|firstname)/.test(lower) ||
+    /^[bcdfghjklmnpqrstvwxyz]{4,}$/.test(lower)
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+const isSpammyEmail = (email) => {
+  if (!email) return true;
+  const local = (email.split("@")[0] || "").toLowerCase();
+
+  const dotCount = (local.match(/\./g) || []).length;
+    if (dotCount >= 3) return true;
+    if (local.includes("..") || local.startsWith(".") || local.endsWith(".")) return true;
+    if (local.length < 3) return true;
+
+    // 🔥 NEW: Block short emails with dots (e.g. h.e.n, a.b.c, x.y)
+    if (dotCount >= 2 && local.length <= 6) return true;
+    if (dotCount >= 1 && local.replace(/\./g, "").length <= 3) return true;
+
+    // Existing rules
+    if (!/[aeiou]/.test(local)) return true;
+    if (/[bcdfghjklmnpqrstvwxyz]{5,}/.test(local)) return true;
+    if (/^(test|temp|fake|asdf|qwerty|xxx|spam|abc|123|admin)/.test(local)) return true;
+    if (/^\d+$/.test(local)) return true;
+    if (/^[a-z]{1,2}\d+$/.test(local)) return true;
+    if (local.length >= 8 && !/[aeiou].*[aeiou]/.test(local)) return true;
+
+    return false;
+  };
 
 // ================= REGISTER =================
 export const register = async (req, res) => {
@@ -49,26 +105,106 @@ export const register = async (req, res) => {
       roomType,
       needFromDate,
       notes,
-      isVerified 
+      isVerified,
+      website, // honeypot
     } = req.body;
 
-    const emailLower = email.toLowerCase();
-
-    const existingUser = await User.findOne({ email: emailLower });
-
-    if (existingUser) {
-      return res.status(400).json({
-        message: "Email already registered"
+    // ============================
+    // 🛡️ HONEYPOT CHECK
+    // ============================
+    if (website) {
+      return res.status(201).json({
+        success: true,
+        message: "Registration successful. Please verify your email.",
       });
     }
 
+    // ============================
+    // ✅ BASIC REQUIRED FIELDS
+    // ============================
+    if (!firstName || !surname || !email || !password) {
+      return res.status(400).json({
+        message: "First name, surname, email and password are required",
+      });
+    }
+
+    // ============================
+    // 🔍 NAME VALIDATION (firstName + surname)
+    // ============================
+    if (!isValidName(firstName)) {
+      return res.status(400).json({
+        message: "Invalid first name. Please provide a real name.",
+      });
+    }
+
+    if (!isValidName(surname)) {
+      return res.status(400).json({
+        message: "Invalid surname. Please provide a real name.",
+      });
+    }
+
+    // NameAPI check
+    const firstNameSafe = await isNameSafe(firstName);
+    if (!firstNameSafe) {
+      return res.status(400).json({
+        message: "Invalid first name. Please provide a real name.",
+      });
+    }
+
+    const surnameSafe = await isNameSafe(surname);
+    if (!surnameSafe) {
+      return res.status(400).json({
+        message: "Invalid surname. Please provide a real name.",
+      });
+    }
+
+    // ============================
+    // 🔍 EMAIL VALIDATION
+    // ============================
+    const emailLower = email.toLowerCase().trim();
+
+    if (isSpammyEmail(emailLower)) {
+      return res.status(400).json({
+        message: "Invalid email address",
+      });
+    }
+
+    const emailValidation = await validate({
+      email: emailLower,
+      validateRegex: true,
+      validateMx: true,
+      validateTypo: true,
+      validateDisposable: true,
+      validateSMTP: false,
+    });
+
+    if (!emailValidation.valid) {
+      console.log("❌ Email validation failed:", emailValidation.reason);
+      return res.status(400).json({
+        message: "Invalid or disposable email address",
+      });
+    }
+
+    // ============================
+    // 🔍 CHECK IF EMAIL ALREADY EXISTS
+    // ============================
+    const existingUser = await User.findOne({ email: emailLower });
+    if (existingUser) {
+      return res.status(400).json({
+        message: "Email already registered",
+      });
+    }
+
+    // ============================
+    // 🔹 CREATE USER
+    // ============================
     const verifyToken = crypto.randomBytes(32).toString("hex");
 
     const user = await User.create({
       title,
-      firstName,
-      surname,
-      email:emailLower,
+      firstName: firstName.trim(),
+      surname: surname.trim(),
+      email: emailLower,
       phone,
       password,
       budgetFrom,
@@ -78,12 +214,14 @@ export const register = async (req, res) => {
       needFromDate,
       notes,
       isVerified: isVerified || false,
-      emailVerifyToken: verifyToken
+      emailVerifyToken: verifyToken,
     });
 
     const verifyUrl = `${process.env.SERVER_URL}/api/auth/verify-email/${verifyToken}`;
 
-    // BEAUTIFUL EMAIL TEMPLATE
+    // ============================
+    // 📧 EMAIL TEMPLATE
+    // ============================
     const html = `
     <div style="font-family:Arial;background:#f5f5f5;padding:10px">
       <div style="max-width:800px;margin:auto;background:white;border-radius:10px;overflow:hidden">
@@ -105,7 +243,6 @@ export const register = async (req, res) => {
           </p>
 
           <div style="text-align:center;margin:35px 0">
-
             <a href="${verifyUrl}"
             style="
             background:#F47C3C;
@@ -117,14 +254,13 @@ export const register = async (req, res) => {
             ">
             Verify Email
             </a>
-
           </div>
 
           <p>If you did not create this account, please ignore this email.</p>
 
           <p style="margin-top:30px">
           Regards,<br/>
-          <strong>Your Team</strong>
+          <strong>Team</strong>
           </p>
 
         </div>
@@ -137,21 +273,21 @@ export const register = async (req, res) => {
     </div>
     `;
 
-    // 🔥 send email AFTER response
-  sendEmail(email, "Welcome! Verify your email", html)
-    .then(() => console.log("Email sent"))
-    .catch((err) => console.error("Email error:", err));
+    // 🔥 Send email in background (don't block response)
+    sendEmail(emailLower, "Welcome! Verify your email", html)
+      .then(() => console.log("✅ Verification email sent to:", emailLower))
+      .catch((err) => console.error("❌ Email error:", err.message));
 
+    // Fast response
     res.status(201).json({
       success: true,
-      message: "Registration successful. Please verify your email."
+      message: "Registration successful. Please verify your email.",
     });
-
   } catch (error) {
+    console.error("🔥 Register error:", error);
     res.status(500).json({ message: error.message });
   }
 };
-
 
 
 // ================= VERIFY EMAIL =================

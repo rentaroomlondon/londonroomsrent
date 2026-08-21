@@ -1,5 +1,55 @@
 import Contact from "../Models/Contact.js";
 import { sendEmail } from "../utils/sendEmail.js";
+import { validate } from "deep-email-validator";
+import { isNameSafe } from "../utils/validateName.js"; // ← NameAPI helper
+
+// ---------- Helpers ----------
+const isValidName = (name) => {
+  if (!name || typeof name !== "string") return false;
+  const cleaned = name.trim();
+
+  // 1. Basic format
+  if (!/^[a-zA-Z\s'-]{2,40}$/.test(cleaned)) return false;
+
+  // 2. Must contain at least one vowel
+  if (!/[aeiouAEIOU]/.test(cleaned)) return false;
+
+  // 3. Reject too many consecutive consonants
+  if (/[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{5,}/.test(cleaned)) {
+    return false;
+  }
+
+  // 4. Reject very short names
+  if (cleaned.length < 3) return false;
+
+  return true;
+};
+
+const isValidPhone = (phone) => {
+  if (!phone || typeof phone !== "string") return false;
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 15;
+};
+
+const isSpammyEmail = (email) => {
+  if (!email) return true;
+  const local = (email.split("@")[0] || "").toLowerCase();
+
+  const dotCount = (local.match(/\./g) || []).length;
+  if (dotCount >= 3) return true;
+  if (local.includes("..") || local.startsWith(".") || local.endsWith(".")) return true;
+  if (local.length < 3) return true;
+
+  // Random / test patterns
+  if (!/[aeiou]/.test(local)) return true;
+  if (/[bcdfghjklmnpqrstvwxyz]{5,}/.test(local)) return true;
+  if (/^(test|temp|fake|asdf|qwerty|xxx|spam|abc|123|admin)/.test(local)) return true;
+  if (/^\d+$/.test(local)) return true;
+  if (/^[a-z]{1,2}\d+$/.test(local)) return true;
+  if (local.length >= 8 && !/[aeiou].*[aeiou]/.test(local)) return true;
+
+  return false;
+};
 
 export const submitContact = async (req, res) => {
   try {
@@ -11,25 +61,98 @@ export const submitContact = async (req, res) => {
       email,
       phone,
       message,
+      website, // honeypot
     } = req.body;
 
-    // ✅ Validation
-    if (!firstName || !lastName || !email || !phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Please fill all required fields",
+    // ========== 1. HONEYPOT ==========
+    if (website && website.trim() !== "") {
+      return res.status(201).json({
+        success: true,
+        message: "Message sent successfully",
       });
     }
 
-    // ✅ Save to DB
+    // ========== 2. BASIC + STRONG VALIDATION ==========
+    const errors = [];
+
+    if (!isValidName(firstName)) {
+      errors.push("Please enter a valid first name");
+    }
+    if (!isValidName(lastName)) {
+      errors.push("Please enter a valid surname");
+    }
+    if (!isValidPhone(phone)) {
+      errors.push("Please enter a valid phone number (at least 10 digits)");
+    }
+
+    const allowedTitles = ["Mr", "Mrs", "Ms"];
+    const allowedMethods = ["Call me", "Email me"];
+
+    if (title && !allowedTitles.includes(title)) {
+      errors.push("Invalid title selected");
+    }
+    if (contactMethod && !allowedMethods.includes(contactMethod)) {
+      errors.push("Invalid contact method selected");
+    }
+
+    if (isSpammyEmail(email?.trim().toLowerCase())) {
+      errors.push("Please enter a valid email address");
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: errors[0],
+      });
+    }
+
+    // ========== 3. NameAPI Risk Detector ==========
+    const firstNameSafe = await isNameSafe(firstName);
+    if (!firstNameSafe) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid first name",
+      });
+    }
+
+    const lastNameSafe = await isNameSafe(lastName);
+    if (!lastNameSafe) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid surname",
+      });
+    }
+
+    // Optional: also check full name together
+    // const fullNameSafe = await isNameSafe(`${firstName} ${lastName}`);
+    // if (!fullNameSafe) { ... }
+
+    // ========== 4. STRONG EMAIL VALIDATION ==========
+    const emailResult = await validate({
+      email: email?.trim().toLowerCase(),
+      validateRegex: true,
+      validateMx: true,
+      validateTypo: true,
+      validateDisposable: true,
+      validateSMTP: false,
+    });
+
+    if (!emailResult.valid) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address",
+      });
+    }
+
+    // ========== 5. SAVE TO DB ==========
     const contact = await Contact.create({
-      contactMethod,
-      title,
-      firstName,
-      lastName,
-      email,
-      phone,
-      message,
+      contactMethod: contactMethod || "Call me",
+      title: title || "Mr",
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      message: message ? message.trim() : "",
     });
 
     // =========================
@@ -88,11 +211,17 @@ export const submitContact = async (req, res) => {
     </div>
     `;
 
-    await sendEmail(
+    const adminRecipients = [
       "londonroomsrent2@gmail.com",
-      "📩 New Contact Inquiry",
-      adminHtml
-    );
+      "info@londonroomsrent.co.uk",
+    ];
+
+    try {
+      await sendEmail(adminRecipients, "📩 New Contact Inquiry", adminHtml);
+      console.log("✅ ADMIN EMAIL SENT SUCCESSFULLY");
+    } catch (error) {
+      console.error("❌ ADMIN EMAIL FAILED:", error.message);
+    }
 
     // =========================
     // 📧 USER EMAIL
@@ -109,7 +238,7 @@ export const submitContact = async (req, res) => {
 
           <p>Hello ${firstName},</p>
 
-          <p>Thank you for contacting <strong>LONDONROOMSRENT</strong>.</p>
+          <p>Thank you for contacting <strong>LONDONROOMSRENT/strong>.</p>
           <p>We will get back to you shortly.</p>
 
           <hr/>
@@ -140,22 +269,44 @@ export const submitContact = async (req, res) => {
     </div>
     `;
 
-    await sendEmail(
-      email,
-      "We Received Your Message",
-      userHtml
-    );
-
-    // =========================
+    try {
+      await sendEmail(email, "We Received Your Message", userHtml);
+      console.log(`✅ CUSTOMER CONFIRMATION EMAIL SENT → ${email}`);
+    } catch (error) {
+      console.error("❌ CUSTOMER EMAIL FAILED:", error.message);
+    }
 
     return res.status(201).json({
       success: true,
       message: "Message sent successfully",
       data: contact,
     });
-
   } catch (error) {
     console.error("Contact Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
+
+
+
+// ============================
+// 🟢 GET ALL CONTACTS (ADMIN)
+// ============================
+export const getAllContacts = async (req, res) => {
+  try {
+    const contacts = await Contact.find()
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: contacts.length,
+      data: contacts,
+    });
+  } catch (error) {
+    console.error("Get All Contacts Error:", error);
     res.status(500).json({
       success: false,
       message: "Server Error",

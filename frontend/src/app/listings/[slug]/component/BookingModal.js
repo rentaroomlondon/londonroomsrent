@@ -12,6 +12,8 @@ import LoginForm from "./LoginForm";
 import RegisterForm from "./RegisterForm";
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
+import { isValidPhoneNumber, parsePhoneNumber } from "libphonenumber-js";
+import { analytics } from "@/app/utils/analytics"; // ← restored
 
 const BookingModal = ({ isOpen, onClose, listing }) => {
   const { user, fetchUser } = useAuth();
@@ -20,7 +22,7 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
   const [authMode, setAuthMode] = useState("login");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const hasBookedRef = useRef(false); // 🔥 prevent double booking
+  const hasBookedRef = useRef(false);
 
   const [bookingData, setBookingData] = useState({
     date: "",
@@ -29,6 +31,7 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
     name: "",
     email: "",
     phone: "",
+    website: "", // honeypot
   });
 
   // ============================
@@ -39,7 +42,15 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
       setTimeout(() => {
         setStep(1);
         setAuthMode("login");
-        setBookingData({ date: "", timeSlot: "", message: "", name: "", email: "", phone: "", });
+        setBookingData({
+          date: "",
+          timeSlot: "",
+          message: "",
+          name: "",
+          email: "",
+          phone: "",
+          website: "",
+        });
         setErrors({});
         hasBookedRef.current = false;
       }, 300);
@@ -56,14 +67,102 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
     }
   }, [user, step]);
 
-  // ❗ IMPORTANT: AFTER HOOKS
   if (!isOpen) return null;
+
+  // ============================
+  // VALIDATION HELPERS
+  // ============================
+  const isValidRealName = (name) => {
+    if (!name || typeof name !== "string") return false;
+
+    const cleaned = name.trim();
+
+    if (cleaned.length < 2 || cleaned.length > 40) return false;
+    if (!/^[a-zA-Z\s'-]+$/.test(cleaned)) return false;
+    if (!/[a-zA-Z]/.test(cleaned)) return false;
+
+    const lower = cleaned.toLowerCase();
+
+    const blockedPatterns = [
+      "test", "testing", "tester", "testuser", "test1", "test2", "test3",
+      "test87", "test123", "dummy", "fake", "sample", "example",
+      "asdf", "qwer", "zxcv", "qwerty", "asdfgh", "zxcvbn",
+      "qazwsx", "poiuyt", "hjkl", "uiop", "bnm",
+      "jhdb", "hbds", "dsgh", "fghj", "cvbn", "tyui",
+      "qwe", "asd", "zxc", "rty", "fgh", "vbn",
+      "name", "fullname", "firstname", "lastname", "username", "user", "admin", "guest"
+    ];
+
+    if (blockedPatterns.some((pattern) => lower.includes(pattern))) {
+      return false;
+    }
+
+    const lettersOnly = cleaned.replace(/[\s'-]/g, "");
+    if (/^(.)\1+$/i.test(lettersOnly)) return false;
+    if (/(.)\1{4,}/.test(cleaned)) return false;
+
+    return true;
+  };
+
+  // ---------- Strong Phone Validation ----------
+  const isFakeOrInvalidPhone = (phone) => {
+    if (!phone) return true;
+
+    const fullPhone = phone.startsWith("+") ? phone : `+${phone.replace(/\D/g, "")}`;
+
+    if (!isValidPhoneNumber(fullPhone)) {
+      return true;
+    }
+
+    try {
+      const parsed = parsePhoneNumber(fullPhone);
+      const nationalNumber = parsed.nationalNumber;
+
+      const isSequential = (num) => {
+        const seq = "01234567890123456789";
+        const revSeq = "98765432109876543210";
+        return seq.includes(num) || revSeq.includes(num);
+      };
+
+      const isRepeated = /^(\d)\1+$/.test(nationalNumber);
+
+      const fakePatterns = [
+        "123456789",
+        "1234567890",
+        "0123456789",
+        "987654321",
+        "9876543210",
+        "111111111",
+        "222222222",
+        "999999999",
+        "000000000",
+        "555555555",
+      ];
+
+      if (
+        isSequential(nationalNumber) ||
+        isRepeated ||
+        fakePatterns.some((fake) => nationalNumber.includes(fake))
+      ) {
+        return true;
+      }
+
+      return false;
+    } catch (err) {
+      return true;
+    }
+  };
 
   // ============================
   // VALIDATION
   // ============================
   const validateForm = () => {
     const newErrors = {};
+
+    // Honeypot
+    if (bookingData.website) {
+      return false;
+    }
 
     if (!bookingData.date) {
       newErrors.date = "Please select a date";
@@ -73,12 +172,45 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
       newErrors.timeSlot = "Please select a time slot";
     }
 
-    // 👇 Guest validation
+    // Guest validation
     if (!user) {
-    if (!bookingData.name.trim()) newErrors.name = "Name is required";
-    if (!bookingData.email.trim()) newErrors.email = "Email is required";
-    if (!bookingData.phone || bookingData.phone.length < 8)
-      newErrors.phone = "Valid phone required";
+      // Name
+      if (!isValidRealName(bookingData.name)) {
+        newErrors.name = "Please enter a valid full name";
+      }
+
+      // ---------- Strong Email Validation ----------
+      const email = bookingData.email.trim().toLowerCase();
+
+      if (!email) {
+        newErrors.email = "Email is required";
+      } else {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+        if (!emailRegex.test(email)) {
+          newErrors.email = "Please enter a valid email";
+        } else {
+          const localPart = email.split("@")[0];
+
+          const isSuspicious =
+            localPart.length < 4 ||
+            (localPart.match(/\./g) || []).length >= 2 ||
+            localPart.includes("..") ||
+            localPart.startsWith(".") ||
+            localPart.endsWith(".") ||
+            /^[0-9]+$/.test(localPart) ||
+            /^(test|fake|dummy|sample|admin|user|guest|asdf|qwer)/.test(localPart);
+
+          if (isSuspicious) {
+            newErrors.email = "Please enter a valid email address";
+          }
+        }
+      }
+
+      // Phone
+      if (isFakeOrInvalidPhone(bookingData.phone)) {
+        newErrors.phone = "Please enter a valid phone number";
+      }
     }
 
     if (bookingData.message.length > 300) {
@@ -94,9 +226,7 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
   // ============================
   const handleNextStep = (e) => {
     e.preventDefault();
-
     if (!validateForm()) return;
-
     submitFinalBooking();
   };
 
@@ -124,11 +254,10 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
             viewingSlot: bookingData.timeSlot,
             message: bookingData.message,
             userId: user?._id || null,
-
-            // 👇 guest fields
             guestName: !user ? bookingData.name : null,
             guestEmail: !user ? bookingData.email : null,
             guestPhone: !user ? bookingData.phone : null,
+            website: bookingData.website,
           }),
         }
       );
@@ -136,6 +265,13 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.message || "Booking failed");
+
+      // ✅ GA4 – fire ONLY after successful backend acceptance
+      // No PII is sent (only property ID + listing reference)
+      analytics.viewingRequest(
+        listing?.title || listing?.name || "Unknown Property",
+        listing?.listingId || listing?._id || listing?.id
+      );
 
       setStep(3);
     } catch (error) {
@@ -156,7 +292,6 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
 
   return (
     <div className="fixed inset-0 z-100 flex items-end sm:items-center justify-center bg-[#0a192f]/60 backdrop-blur-sm transition-all duration-300">
-      
       <div className="bg-white w-full h-[95%] sm:h-auto sm:max-h-[90vh] sm:max-w-125 sm:rounded-4xl rounded-t-4xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
         
         {/* HEADER */}
@@ -202,7 +337,32 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
           {step === 1 && (
             <form onSubmit={handleNextStep} className="space-y-6">
 
-              {/* 👤 Guest Info */}
+              {/* HONEYPOT */}
+              <div
+                style={{
+                  position: "absolute",
+                  left: "-9999px",
+                  opacity: 0,
+                  height: 0,
+                  overflow: "hidden",
+                }}
+                aria-hidden="true"
+              >
+                <label htmlFor="website">Website</label>
+                <input
+                  type="text"
+                  id="website"
+                  name="website"
+                  value={bookingData.website}
+                  onChange={(e) =>
+                    setBookingData({ ...bookingData, website: e.target.value })
+                  }
+                  tabIndex={-1}
+                  autoComplete="off"
+                />
+              </div>
+
+              {/* Guest Info */}
               {!user && (
                 <div className="space-y-4">
                   <div>
@@ -220,12 +380,14 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
                         setBookingData({ ...bookingData, name: e.target.value })
                       }
                     />
-                    {errors.name && <p className="text-red-500 text-xs">{errors.name}</p>}
+                    {errors.name && (
+                      <p className="text-red-500 text-xs mt-1">{errors.name}</p>
+                    )}
                   </div>
 
                   <div>
                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-2">
-                     Email Address
+                      Email Address
                     </label>
                     <input
                       type="email"
@@ -238,7 +400,9 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
                         setBookingData({ ...bookingData, email: e.target.value })
                       }
                     />
-                    {errors.email && <p className="text-red-500 text-xs">{errors.email}</p>}
+                    {errors.email && (
+                      <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+                    )}
                   </div>
 
                   <div>
@@ -252,7 +416,7 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
                       }`}
                     >
                       <PhoneInput
-                        country={"gb"} // default (change if needed)
+                        country={"gb"}
                         value={bookingData.phone}
                         onChange={(phone) => {
                           setBookingData((prev) => ({
@@ -269,7 +433,7 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
                     </div>
 
                     {errors.phone && (
-                      <p className="text-red-500 text-xs">{errors.phone}</p>
+                      <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
                     )}
                   </div>
                 </div>
@@ -282,7 +446,10 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
                 </label>
 
                 <div className="relative">
-                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-orange-500" size={18} />
+                  <Calendar
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-orange-500"
+                    size={18}
+                  />
                   <input
                     type="date"
                     min={new Date().toISOString().split("T")[0]}
@@ -376,14 +543,13 @@ const BookingModal = ({ isOpen, onClose, listing }) => {
                   !bookingData.date ||
                   !bookingData.timeSlot ||
                   (!user &&
-                    (!bookingData.name || !bookingData.email || !bookingData.phone))
+                    (!bookingData.name ||
+                      !bookingData.email ||
+                      !bookingData.phone))
                 }
                 className="w-full bg-[#e36b2c] hover:bg-[#c95a1f] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-lg shadow-orange-500/20"
               >
-                {loading
-                  ? "Processing..."
-                  : "Confirm Booking"
-                  }
+                {loading ? "Processing..." : "Confirm Booking"}
                 {!loading && <ArrowRight size={18} />}
               </button>
             </form>

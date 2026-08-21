@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Gallery from "./component/Gallery";
 import PricingCard from "./component/PricingCard";
 import InfoCard from "./component/InfoCard";
@@ -15,13 +15,29 @@ import SimilarRooms from "./component/SimilarRooms";
 import LocationTransport from "./component/LocationTransports";
 import BookingModal from "./component/BookingModal";
 import NearbyAmenities from "./component/NearbyAmenities";
+import { analytics } from "@/app/utils/analytics";
 
 const Client = ({ listing }) => {
-
   const [isBookingOpen, setIsBookingOpen] = useState(false);
 
   const monthlyPrice = listing?.monthlyPrice || 0;
   const deposit = listing?.deposit;
+  const propertyId = listing?._id || listing?.id;
+  const listingRef = listing?.listingId;
+  const propertyName = listing?.title || listing?.name || "Unknown Property";
+
+  // 🔥 PROPERTY VIEW EVENT
+  useEffect(() => {
+    if (propertyId || propertyName) {
+      analytics.propertyView({
+        property_id: propertyId,
+        property_name: propertyName,
+        listing_ref: listingRef,
+        room_type: listing?.roomType,
+        price: monthlyPrice,
+      });
+    }
+  }, [propertyId, propertyName, listingRef, listing?.roomType, monthlyPrice]);
 
   // 🔥 ROOM TYPE MAP
   const ROOM_TYPE_MAP = {
@@ -39,207 +55,214 @@ const Client = ({ listing }) => {
     "Extra Large (200+ sq ft)": "22+ m²",
   };
 
-  // Update your stats array to include Occupancy for mobile matching
-    const stats = [
-        { 
-            label: "ROOM TYPE", 
-            value: ROOM_TYPE_MAP[listing?.roomType] || "Double", 
-            type: "double" 
-        },
-        { 
-            label: "ROOM SIZE", 
-            // This finds the meter value based on the string stored in listing.roomSize
-            value: ROOM_SIZE_MAP[listing?.roomSize] || "14 m²", 
-            type: "size" 
-        },
-        { label: "PROPERTY", value: listing?.propertySharing || "Shared", type: "shared" },
-        { label: "BATHROOM", value: listing?.bathroomType || "Shared", type: "bath" },
-        { label: "MIN TENANCY", value: `${listing?.minTenancy || ""} Months`, type: "calendar" },
-        { label: "Energy Rating", value: `EPC: ${listing?.epcRating || ""}`, type: "rating" }, 
-    ];
+  const stats = [
+    { 
+      label: "ROOM TYPE", 
+      value: ROOM_TYPE_MAP[listing?.roomType] || "Double", 
+      type: "double" 
+    },
+    { 
+      label: "ROOM SIZE", 
+      value: ROOM_SIZE_MAP[listing?.roomSize] || "14 m²", 
+      type: "size" 
+    },
+    { label: "PROPERTY", value: listing?.propertySharing || "Shared", type: "shared" },
+    { label: "BATHROOM", value: listing?.bathroomType || "Shared", type: "bath" },
+    { label: "MIN TENANCY", value: `${listing?.minTenancy || ""} Months`, type: "calendar" },
+    { label: "Energy Rating", value: `EPC: ${listing?.epcRating || ""}`, type: "rating" }, 
+  ];
 
-    const getBillsText = (bills) => {
-        if (!bills) return "Check details";
+  const getBillsText = (bills) => {
+    if (!bills) return "Check details";
 
-        const essentials =
-            bills.electricity &&
-            bills.gas &&
-            bills.water;
+    const essentials =
+      bills.electricity &&
+      bills.gas &&
+      bills.water;
 
-        if (essentials && bills.wifi === false) {
-            return "All Included";
-        }
+    if (essentials && bills.wifi === false) {
+      return "All Included";
+    }
 
-        return essentials ? "All Bills Included" : "Not Bills Included";
-    };
+    return essentials ? "All Bills Included" : "Not Bills Included";
+  };
 
-    const formatAddress = (address) => {
-      if (!address) return "";
+  const formatAddress = (address) => {
+    if (!address) return "";
+    return address.replace(/^\s*\d+[a-zA-Z]?\s*/, "");
+  };
 
-      // Remove starting number + optional letter (e.g. 92, 118A, 129b)
-      return address.replace(/^\s*\d+[a-zA-Z]?\s*/, "");
-    };
+  // WhatsApp click handler with analytics
+  const handleWhatsAppClick = () => {
+    analytics.whatsappClick(
+      propertyName,
+      "property_page_mobile"
+    );
+    window.open("https://wa.me/447950309760", "_blank");
+  };
 
   return (
     <>
-    <div className="relative pb-6 md:pb-0">
+      <div className="relative pb-6 md:pb-0">
 
-      {/* 🔥 FULL WIDTH GALLERY */}
-      <Gallery
-        images={listing?.images || []}
-        available={listing?.availableImmediately}
-      />
+        {/* 🔥 FULL WIDTH GALLERY */}
+        <Gallery
+          images={listing?.images || []}
+          available={listing?.availableImmediately}
+        />
 
-      <div className="max-w-300 mx-auto px-4 md:px-6 py-2">
-        <div className="flex flex-col lg:flex-row gap-10">
+        <div className="max-w-300 mx-auto px-4 md:px-6 py-2">
+          <div className="flex flex-col lg:flex-row gap-10">
 
-          {/* LEFT */}
-          <div className="flex-1">
+            {/* LEFT */}
+            <div className="flex-1">
 
-            {/* ✅ TAGS */}
-            <Tags listing={listing} />
-            
+              {/* ✅ TAGS */}
+              <Tags listing={listing} />
+              
 
-            {/* TITLE */}
-            <h1 className="text-xl md:text-5xl font-extrabold text-[#0C1F33] mb-2 leading-tight">
-              {listing?.title}
-            </h1>
+              {/* TITLE */}
+              <h1 className="text-xl md:text-5xl font-extrabold text-[#0C1F33] mb-2 leading-tight">
+                {listing?.title}
+              </h1>
 
-            {/* LOCATION */}
-            <div className="flex items-center gap-1 text-gray-400 mb-8">
-              <MapPin size={16} className="text-red-500" />
-              <p className="text-sm font-medium">
-                {formatAddress(listing?.location?.address)}, {listing?.location?.postcode}, {listing?.location?.city}
-              </p>
-            </div>
+              {/* LOCATION */}
+              <div className="flex items-center gap-1 text-gray-400 mb-8">
+                <MapPin size={16} className="text-red-500" />
+                <p className="text-sm font-medium">
+                  {formatAddress(listing?.location?.address)}, {listing?.location?.postcode}, {listing?.location?.city}
+                </p>
+              </div>
 
-            {/* Price Section (Previous fix) */}
-            <div className="md:hidden border-y border-gray-100 py-6 my-4">
-            
+              {/* Price Section (Mobile) */}
+              <div className="md:hidden border-y border-gray-100 py-6 my-4">
+              
                 {/* Price & Availability Row */}
                 <div className="flex justify-between items-start mb-6 ">
-                    <div className="flex-1">
+                  <div className="flex-1">
                     <div className="flex items-baseline leading-none">
-                        <span className="text-[#F27A3D] text-[38px] font-black tracking-tight">
+                      <span className="text-[#F27A3D] text-[38px] font-black tracking-tight">
                         £{monthlyPrice}
-                        </span>
-                        <span className="text-gray-500 text-sm ml-2 font-medium">/ month</span>
+                      </span>
+                      <span className="text-gray-500 text-sm ml-2 font-medium">/ month</span>
                     </div>
                     <p className="text-gray-400 text-[12px] mt-1 font-medium">
-                     £{listing?.monthlyPrice} / month · {getBillsText(listing?.billsIncluded)}
+                      £{listing?.monthlyPrice} / month · {getBillsText(listing?.billsIncluded)}
                     </p>
-                    </div>
+                  </div>
 
-                    <div className="flex flex-col items-end">
+                  <div className="flex flex-col items-end">
                     <div className="bg-[#E9F9F0] text-[#10B981] px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center">
-                        <span className="mr-1.5 text-[8px] leading-none">●</span>
-                        {listing?.availableImmediately ? "Available Now" : "Available"}
+                      <span className="mr-1.5 text-[8px] leading-none">●</span>
+                      {listing?.availableImmediately ? "Available Now" : "Available"}
                     </div>
                     <p className="text-gray-400 text-[11px] mt-2">
-                        Move in: <span className="text-gray-500">{
-                            listing?.availableImmediately
-                            ? "Immediately"
-                            : listing?.availableFrom
-                            ? new Date(listing.availableFrom).toLocaleDateString()
-                            : "Check availability"
-                        }</span>
+                      Move in: <span className="text-gray-500">{
+                        listing?.availableImmediately
+                          ? "Immediately"
+                          : listing?.availableFrom
+                          ? new Date(listing.availableFrom).toLocaleDateString()
+                          : "Check availability"
+                      }</span>
                     </p>
-                    </div>
+                  </div>
                 </div>
 
                 {/* Button Row */}
                 <div className="flex gap-3 ">
-                    {/* Orange Button with Shadow */}
-                    <button onClick={() => setIsBookingOpen(true)} className="flex-1 bg-[#F27A3D] text-white py-2 rounded-[10px] font-bold flex items-center justify-center gap-2 shadow-[0_10px_20px_-5px_rgba(242,122,61,0.3)] hover:opacity-90 transition-opacity">
+                  <button 
+                    onClick={() => setIsBookingOpen(true)} 
+                    className="flex-1 bg-[#F27A3D] text-white py-2 rounded-[10px] font-bold flex items-center justify-center gap-2 shadow-[0_10px_20px_-5px_rgba(242,122,61,0.3)] hover:opacity-90 transition-opacity"
+                  >
                     <span className="text-lg">📅</span>
                     <span className="text-[15px]">Book Viewing</span>
-                    </button>
-                    
-                    {/* Dark Navy Button */}
-                    <button
-                      onClick={() => window.open("https://wa.me/447950309760", "_blank")}
-                      className="flex-1 bg-[#101D2D] text-white py-2 rounded-[10px] font-bold flex items-center justify-center gap-2 hover:bg-[#1a2b40] transition-colors"
-                    >
-                      <span className="text-lg">📞</span>
-                      <span className="text-[10px]">Whatsapp Agent</span>
-                    </button>
+                  </button>
+                  
+                  <button
+                    onClick={handleWhatsAppClick}
+                    className="flex-1 bg-[#101D2D] text-white py-2 rounded-[10px] font-bold flex items-center justify-center gap-2 hover:bg-[#1a2b40] transition-colors"
+                  >
+                    <span className="text-lg">📞</span>
+                    <span className="text-[10px]">Whatsapp Agent</span>
+                  </button>
                 </div>
-            </div>
+              </div>
 
-            {/* INFO GRID */}
-            <div className="mb-10">
-                {/* Mobile View: 3x2 Grid of separate cards */}
+              {/* INFO GRID */}
+              <div className="mb-10">
+                {/* Mobile View */}
                 <div className="grid grid-cols-3 gap-2 md:hidden">
-                    {stats.map((item, idx) => (
+                  {stats.map((item, idx) => (
                     <div key={idx} className="bg-[#F2F4F7] border border-[#E4E8EE] rounded-2xl shadow-sm">
-                        <InfoCard {...item} isLast={true} />
+                      <InfoCard {...item} isLast={true} />
                     </div>
-                    ))}
+                  ))}
                 </div>
 
-                {/* Desktop View: Single unified horizontal bar */}
+                {/* Desktop View */}
                 <div className="hidden md:flex bg-white border border-gray-200 rounded-3xl shadow-sm overflow-hidden">
-                    {stats.map((item, idx) => (
+                  {stats.map((item, idx) => (
                     <InfoCard 
-                        key={idx} 
-                        {...item} 
-                        isLast={idx === stats.length - 1} 
+                      key={idx} 
+                      {...item} 
+                      isLast={idx === stats.length - 1} 
                     />
-                    ))}
+                  ))}
                 </div>
-            </div>
+              </div>
 
-            {/* DESCRIPTION */}
-            <Description text={listing?.description} />
+              {/* DESCRIPTION */}
+              <Description text={listing?.description} />
 
-            <Amenities
+              <Amenities
                 roomAmenities={listing?.roomAmenities} 
                 propertyAmenities={listing?.propertyAmenities}
-            />
+              />
 
-            {/* ✅ BILLS SECTION */}
-            <Bills 
+              {/* ✅ BILLS SECTION */}
+              <Bills 
                 billsIncluded={listing?.billsIncluded} 
                 wifiSpeed={listing?.wifiSpeed}
                 councilTaxBand={listing?.councilTaxBand}
-            />
+              />
 
-            <LocationTransport listing={listing} />
+              <LocationTransport listing={listing} />
 
-            <NearbyAmenities listing={listing} />
+              <NearbyAmenities listing={listing} />
 
-            <Details listing={listing} />
+              <Details listing={listing} />
 
-            <ConsultantCard />
+              <ConsultantCard />
 
-            <SimilarRooms currentRoom={listing} />
+              <SimilarRooms currentRoom={listing} />
+            </div>
+
+            {/* RIGHT */}
+            <div className="hidden lg:block w-95">
+              <PricingCard
+                listing={listing}
+                monthlyPrice={monthlyPrice}
+                deposit={deposit}
+              />
+            </div>
           </div>
+        </div>
 
-          {/* RIGHT */}
-          <div className="hidden lg:block w-95">
-            <PricingCard
-              listing={listing}
-              monthlyPrice={monthlyPrice}
-              deposit={deposit}
-            />
-          </div>
+        {/* 🔥 MOBILE STICKY CTA */}
+        <div className="md:hidden">
+          <MobileStickyCTA
+            price={monthlyPrice} 
+            billsText={getBillsText(listing?.billsIncluded)} 
+            listing={listing}
+          />
         </div>
       </div>
 
-      {/* 🔥 MOBILE STICKY CTA */}
-      <div className="md:hidden">
-        <MobileStickyCTA
-          price={monthlyPrice} 
-          billsText={getBillsText(listing?.billsIncluded)} 
-          listing={listing}
-        />
-      </div>
-    </div>
-    <BookingModal 
+      <BookingModal 
         isOpen={isBookingOpen} 
         onClose={() => setIsBookingOpen(false)}
         listing={listing}
-    />
+      />
     </>
   );
 };

@@ -1,24 +1,33 @@
 import nodemailer from "nodemailer";
-import dotenv from "dotenv";
-dotenv.config();
 
 // ✅ CREATE ONCE (GLOBAL)
 const transporter = nodemailer.createTransport({
-  service: "gmail",                 // ← easiest way for Gmail
+  host: "smtp.hostinger.com",
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,   // App Password
+    pass: process.env.EMAIL_PASS,
   },
 
-  // Optional but recommended
+  // ✅ Pooling
   pool: true,
   maxConnections: 3,
   maxMessages: 50,
-  rateDelta: 1000,
-  rateLimit: 2,
+
+  // ✅ Rate limiting (VERY IMPORTANT)
+  rateDelta: 1000, // 1 second window
+  rateLimit: 2,    // max 2 emails/sec
+
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 20000,
+  tls: {
+    minVersion: "TLSv1.2",
+  },
 });
 
-// ✅ SEND FUNCTION (same as before)
+// ✅ SEND FUNCTION
 export const sendEmail = async (to, subject, html, cc = []) => {
   try {
     return await transporter.sendMail({
@@ -29,14 +38,7 @@ export const sendEmail = async (to, subject, html, cc = []) => {
       ...(cc.length ? { cc: cc.join(",") } : {}),
     });
   } catch (error) {
-    console.error("❌ FULL EMAIL ERROR:");
-    console.error({
-      message: error.message,
-      code: error.code,
-      response: error.response,
-      responseCode: error.responseCode,
-      command: error.command,
-    });
+    console.error("❌ Email error:", error.message);
     throw error;
   }
 };
