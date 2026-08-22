@@ -97,6 +97,7 @@ const PricingCard = ({ listing, monthlyPrice }) => {
 
   // EMAIL
   const handleEmail = () => {
+    analytics.emailClick(propertyName);
     const url = getUrl();
     const subject = `Check this property: ${listing?.title || ""}`;
     const body = `
@@ -106,13 +107,15 @@ const PricingCard = ({ listing, monthlyPrice }) => {
 
 👉 ${url}
     `;
-
-    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    analytics.emailClick(propertyName);
+    // Small delay is optional but safer
+    setTimeout(() => {
+      window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }, 100);
   };
 
   // WhatsApp (share)
   const handleWhatsApp = () => {
+    analytics.whatsappClick(propertyName, 'pricing_card_share');
     const url = getUrl();
     const message = `
 🏡 ${listing?.title || ""}
@@ -123,7 +126,6 @@ const PricingCard = ({ listing, monthlyPrice }) => {
     `;
 
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
-    analytics.whatsappClick(propertyName, 'pricing_card_share');
   };
 
   // WhatsApp Agent button
